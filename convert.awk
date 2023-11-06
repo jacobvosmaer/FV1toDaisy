@@ -1,8 +1,10 @@
+BEGIN { memtop = 0 }
 /^ *;/ {
+  sub(" *;", "")
   if($0 ~ "[a-z]")
     printf "/* %s */\n", $0
+  next
 }
-BEGIN { memtop = 0 }
 $1 == "mem" {
   mem[$2] = memtop
   memtop += $3
@@ -19,7 +21,7 @@ $1 ~ /^[a-z].*:$/ {
   next
 }
 /^ *[a-z]/ {
-  
+  print
 }
 END {
   for (m in mem)
