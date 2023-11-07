@@ -4,6 +4,7 @@
 #include <string.h>
 
 #define MAX_INSTRUCTIONS 128
+#define MAX_MEM_SAMPLES 32768
 #define nelem(x) (sizeof(x) / sizeof(*x))
 
 struct mem {
@@ -92,6 +93,9 @@ void handlemem(char *p, char *pend) {
   expectnum(p);
   mem[nmem].offset = memtop;
   memtop += atoi(p);
+  if (memtop > MAX_MEM_SAMPLES)
+    error("mem declarations use too much memory: %d", memtop);
+
   nmem++;
 }
 
@@ -164,8 +168,8 @@ int main(void) {
       handleskp(p, pend);
   }
 
-  if (nmem >= nelem(mem))
-    error("too many mem declarations");
+  /* Add a sentinel element at the end so that for all i<nmem, size(i) ==
+   * nmem[i+1].offset - nmem[i].offset. */
   mem[nmem].label = 0;
   mem[nmem].offset = memtop;
 
