@@ -1,2 +1,0 @@
-#!/bin/sh
-tr -d '\r' < $1 | awk -f convert.awk
