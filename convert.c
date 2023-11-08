@@ -196,9 +196,6 @@ int parseflags(char **p, char *pend, char *flags[], int nflags) {
       error("invalid bits in flag: 0x%x", ret);
     *p = q;
     skipspace(p);
-    if (**p != ',')
-      error("expected comma after flags");
-    (*p)++;
   } else {
     while (**p != ',') {
       int i;
@@ -214,8 +211,8 @@ int parseflags(char **p, char *pend, char *flags[], int nflags) {
       if (i == nflags)
         error("expected flag at %s", p);
     }
-    (*p)++;
   }
+  eatstr(p, ",");
   return ret;
 }
 
@@ -226,7 +223,6 @@ void parseskp(char *p, char *pend) {
   skipspace(&p);
   flags = parseflags(&p, pend, skpflags, nelem(skpflags));
 
-  p++;
   skipspace(&p);
   q = p;
   skipuntilspace(&q);
@@ -321,7 +317,7 @@ void parsecho(char *p, char *pend) {
     args->sub = "rda";
     skipspace(&p);
     if (pend - p < 4)
-      error("input to short: %s", p);
+      error("input too short: %s", p);
     if (p[3] != '0' && p[3] != '1')
       error("expect xxx0 or xxx1, got %s", p);
     if (startwith(p, "sin"))
