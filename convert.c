@@ -23,7 +23,7 @@ struct equ {
 } equ[2 * MAX_INSTRUCTIONS];
 int nequ = 0;
 
-char *skpflags[] = {"run", "zrc", "zro", "gez", "neg"};
+char *skpflags[] = {"neg", "gez", "zro", "zrc", "run"};
 
 struct skipargs {
   int flags;
@@ -169,27 +169,53 @@ void parseequ(char *p, char *pend) {
 
 void printnone(struct instruction in) {}
 
+int parseflags(char **p, char *pend, char *flags[], int nflags) {
+  int ret = 0;
+
+  skipspace(p);
+  if (**p == ',') {
+    (*p)++;
+    return 0;
+  }
+
+  if (num(**p)) {
+    char *q;
+    ret = strtol(*p, &q, 0);
+    if (*p == q)
+      error("failed to parse flag: %s", *p);
+    if (ret >= 1 << nflags)
+      error("invalid bits in flag: 0x%x", ret);
+    *p = q;
+    skipspace(p);
+    if (**p != ',')
+      error("expected comma after flags");
+    (*p)++;
+  } else {
+    while (**p != ',') {
+      int i;
+      for (i = 0; i < nflags; i++) {
+        int n = strlen(flags[i]);
+        if (pend - *p >= n + 1 && !memcmp(*p, flags[i], n) &&
+            ((*p)[n] == ',' || (*p)[n] == '|')) {
+          ret |= 1 << i;
+          *p += n + ((*p)[n] == '|');
+          break;
+        }
+      }
+      if (i == nflags)
+        error("expected flag at %s", p);
+    }
+    (*p)++;
+  }
+  return ret;
+}
+
 void parseskp(char *p, char *pend) {
   int flags = 0;
   char *q;
 
   skipspace(&p);
-  while (*p != ',') {
-    int i;
-    for (i = 0; i < nelem(skpflags); i++) {
-      int n = strlen(skpflags[i]);
-      if (pend - p >= n + 1 && !memcmp(p, skpflags[i], n) &&
-          (p[n] == ',' || p[n] == '|')) {
-        flags |= 1 << i;
-        p += n + (p[n] == '|');
-        break;
-      }
-    }
-    if (i == nelem(skpflags))
-      error("expected flag at %s", p);
-  }
-  if (!flags)
-    error("expected nonzero flags bitmap at %s", p);
+  flags = parseflags(&p, pend, skpflags, nelem(skpflags));
 
   p++;
   skipspace(&p);
@@ -210,14 +236,15 @@ void parseskp(char *p, char *pend) {
 }
 
 void printskp(struct instruction in) {
-  int i;
+  int i, n;
 
   printf("skp ");
-  for (i = 0; i < nelem(skpflags); i++) {
+  for (i = 0, n = 0; i < nelem(skpflags); i++) {
     if (in.args.skp.flags & 1 << i) {
-      if (i)
+      if (n)
         putchar('|');
       printf("%s", skpflags[i]);
+      n++;
     }
   }
   printf(", ");
