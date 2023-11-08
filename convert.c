@@ -39,12 +39,18 @@ struct labelargs {
   char *name;
 };
 
+struct choargs {
+  char *sub;
+  int n, c, addr;
+};
+
 struct instruction {
   char *op;
   union {
     struct skipargs skp;
     struct wldsargs wlds;
     struct labelargs label;
+    struct choargs cho;
   } args;
 } instr[2 * MAX_INSTRUCTIONS];
 int ninstr;
@@ -101,17 +107,20 @@ void expectchar(char *text, char c) {
     error("expected %c, got %s", c, text);
 }
 
-void eatstr(char **text, char *prefix) {
-  char *p = prefix, *q = *text;
-
-  while (*p && *q && *p == *q) {
-    p++;
-    q++;
+int startwith(char *text, char *prefix) {
+  while (*text && *prefix && *text == *prefix) {
+    text++;
+    prefix++;
   }
-  if (*p)
-    error("expected text starting with %s, got %s", prefix, text);
 
-  *text = q;
+  return !*prefix;
+}
+
+void eatstr(char **text, char *prefix) {
+  if (!startwith(*text, prefix))
+    error("expected text starting with %s, got %s", prefix, *text);
+
+  *text += strlen(prefix);
 }
 
 char *Strdup(char *text) {
@@ -223,8 +232,6 @@ void parseskp(char *p, char *pend) {
   skipuntilspace(&q);
   *q = 0;
 
-  if (ninstr >= nelem(instr))
-    error("too many instructions");
   instr[ninstr].op = "skp";
   instr[ninstr].args.skp.flags = flags;
   if (num(*q))
@@ -235,18 +242,21 @@ void parseskp(char *p, char *pend) {
   ninstr++;
 }
 
-void printskp(struct instruction in) {
+void printflags(int bits, char *flags[], int nflags) {
   int i, n;
-
-  printf("skp ");
-  for (i = 0, n = 0; i < nelem(skpflags); i++) {
-    if (in.args.skp.flags & 1 << i) {
+  for (i = 0, n = 0; i < nflags; i++) {
+    if (bits & 1 << i) {
       if (n)
         putchar('|');
-      printf("%s", skpflags[i]);
+      printf("%s", flags[i]);
       n++;
     }
   }
+}
+
+void printskp(struct instruction in) {
+  printf("skp ");
+  printflags(in.args.skp.flags, skpflags, nelem(skpflags));
   printf(", ");
   if (in.args.skp.label)
     printf("%s", in.args.skp.label);
@@ -298,15 +308,61 @@ void parsenone(char *p, char *pend) {}
 
 void printlabel(struct instruction in) { printf("%s:", in.args.label.name); }
 
+char *chordaflags[] = {"cos", "reg", "compc", "compa", "rptr2", "na"};
+
+void parsecho(char *p, char *pend) {
+  struct choargs *args = &instr[ninstr].args.cho;
+  instr[ninstr].op = "cho";
+
+  skipspace(&p);
+  if (startwith(p, "rdal")) {       /* cho rdal */
+  } else if (startwith(p, "rda")) { /* cho rda */
+    eatstr(&p, "rda,");
+    args->sub = "rda";
+    skipspace(&p);
+    if (pend - p < 4)
+      error("input to short: %s", p);
+    if (p[3] != '0' && p[3] != '1')
+      error("expect xxx0 or xxx1, got %s", p);
+    if (startwith(p, "sin"))
+      args->n = p[3] - '0';
+    else if (startwith(p, "rmp"))
+      args->n = (p[3] - '0') << 1;
+    else
+      error("expected sin or rmp, got %s", p);
+    p += 4;
+
+    skipspace(&p);
+    eatstr(&p, ",");
+    skipspace(&p);
+    args->c = parseflags(&p, pend, chordaflags, nelem(chordaflags));
+    skipspace(&p);
+
+    puts(p);
+  } else if (startwith(p, "sof")) { /* cho sof */
+  } else {
+    error("invalid cho instruction: %s", p);
+  }
+
+  ninstr++;
+}
+
+void printcho(struct instruction in) {
+  struct choargs args = in.args.cho;
+  printf("cho ");
+  if (!strcmp(args.sub, "rda")) {
+    printf("rda, %s%d, ", args.n & 2 ? "rmp" : "sin", args.n & 1);
+    printflags(args.c, chordaflags, nelem(chordaflags));
+  }
+}
+
 struct {
   char *op;
   void (*parse)(char *p, char *pend);
   void (*print)(struct instruction in);
-} optab[] = {{"mem", parsemem, printnone},
-             {"equ", parseequ, printnone},
-             {"skp", parseskp, printskp},
-             {"wlds", parsewlds, printwlds},
-             {"label", parsenone, printlabel}};
+} optab[] = {{"mem", parsemem, printnone},     {"equ", parseequ, printnone},
+             {"skp", parseskp, printskp},      {"wlds", parsewlds, printwlds},
+             {"label", parsenone, printlabel}, {"cho", parsecho, printcho}};
 
 int main(void) {
   char *p;
@@ -325,6 +381,9 @@ int main(void) {
     *pend = 0;
 
     skipspace(&p);
+
+    if (ninstr >= nelem(instr))
+      error("too many instructions");
 
     if ((q = strchr(p, ':'))) {
       *q = 0; /* TODO validate label */
