@@ -1,1 +1,5 @@
+FV-1 assembler to Daisy transpiler
 
+The goal of this project is to create a transpiler that takes FV-1
+assembly as input and that generates C++ DSP code for the Daisy
+platform as output. It is currently under development and not usable.
