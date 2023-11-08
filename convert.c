@@ -31,12 +31,12 @@ struct skipargs {
   int steps;
 };
 
-struct {
+struct instruction {
   char *op;
   union {
     struct skipargs skp;
   } args;
-} instr[MAX_INSTRUCTIONS];
+} instr[2 * MAX_INSTRUCTIONS];
 int ninstr;
 
 char line[1024];
@@ -91,7 +91,7 @@ char *Strdup(char *text) {
   return q;
 }
 
-void handlemem(char *p, char *pend) {
+void parsemem(char *p, char *pend) {
   char *q;
 
   if (nmem >= nelem(mem) - 1)
@@ -112,8 +112,9 @@ void handlemem(char *p, char *pend) {
 
   nmem++;
 }
+void printmem(struct instruction in) {}
 
-void handleequ(char *p, char *pend) {
+void parseequ(char *p, char *pend) {
   char *q;
 
   if (nequ >= nelem(equ))
@@ -137,7 +138,9 @@ void handleequ(char *p, char *pend) {
   nequ++;
 }
 
-void handleskp(char *p, char *pend) {
+void printequ(struct instruction in) {}
+
+void parseskp(char *p, char *pend) {
   int flags = 0;
   char *q;
 
@@ -177,10 +180,39 @@ void handleskp(char *p, char *pend) {
   ninstr++;
 }
 
+void printskp(struct instruction in) {
+  int j;
+
+  printf("skp ");
+  for (j = 0; j < nelem(skpflags); j++) {
+    if (in.args.skp.flags & 1 << j) {
+      if (j)
+        putchar('|');
+      printf("%s", skpflags[j]);
+    }
+  }
+  printf(", ");
+  if (in.args.skp.label)
+    printf("%s", in.args.skp.label);
+  else
+    printf("%d", in.args.skp.steps);
+}
+
+void parsewlds(char *p, char *pend) {
+  skipspace(&p);
+
+  puts(p);
+}
+void printwlds(struct instruction in) {}
+
 struct {
   char *op;
-  void (*handle)(char *p, char *pend);
-} handlers[] = {{"mem", handlemem}, {"equ", handleequ}, {"skp", handleskp}};
+  void (*parse)(char *p, char *pend);
+  void (*print)(struct instruction in);
+} optab[] = {{"mem", parsemem, printmem},
+             {"equ", parseequ, printequ},
+             {"skp", parseskp, printskp},
+             {"wlds", parsewlds, printwlds}};
 
 int main(void) {
   char *p;
@@ -200,9 +232,9 @@ int main(void) {
 
     skipspace(&p);
 
-    for (i = 0; i < nelem(handlers); i++) {
-      if (match(handlers[i].op, &p)) {
-        handlers[i].handle(p, pend);
+    for (i = 0; i < nelem(optab); i++) {
+      if (match(optab[i].op, &p)) {
+        optab[i].parse(p, pend);
         break;
       }
     }
@@ -221,22 +253,13 @@ int main(void) {
       printf("equ[%d]={\"%s\",reg%d}\n", i, equ[i].label, equ[i].value.r);
 
   for (i = 0; i < ninstr; i++) {
-    printf("instr[%d]=", i);
-    if (!strcmp("skp", instr[i].op)) {
-      printf("skp ");
-      for (j = 0; j < nelem(skpflags); j++) {
-        if (instr[i].args.skp.flags & 1 << j) {
-          if (j)
-            putchar('|');
-          printf("%s", skpflags[i]);
-        }
+    for (j = 0; j < nelem(optab); j++) {
+      if (!strcmp(instr[i].op, optab[j].op)) {
+        printf("instr[%d]=", i);
+        optab[j].print(instr[i]);
+        putchar('\n');
+        break;
       }
-      printf(", ");
-      if (instr[i].args.skp.label)
-        printf("%s", instr[i].args.skp.label);
-      else
-        printf("%d", instr[i].args.skp.steps);
     }
-    putchar('\n');
   }
 }
