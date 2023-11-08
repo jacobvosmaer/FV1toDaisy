@@ -31,10 +31,15 @@ struct skipargs {
   int steps;
 };
 
+struct wldsargs {
+  int sin, freq, amp;
+};
+
 struct instruction {
   char *op;
   union {
     struct skipargs skp;
+    struct wldsargs wlds;
   } args;
 } instr[2 * MAX_INSTRUCTIONS];
 int ninstr;
@@ -52,6 +57,28 @@ void error(char *fmt, ...) {
   va_end(ap);
 
   exit(1);
+}
+
+struct scanner {
+  char *start, *pos, *end;
+};
+
+#define scanner_advance(scanner, condition)                                    \
+  do {                                                                         \
+    while (((scanner)->pos < (scanner)->end) && (condition))                   \
+      (scanner)->pos++;                                                        \
+    if ((scanner)->pos >= (scanner)->end)                                      \
+      error("scanner reached end of input");                                   \
+  } while (0)
+
+void scanner_eatstr(struct scanner *s, char *prefix) {
+  char *p = prefix;
+  while (s->pos < s->end && *s->pos == *p) {
+    s->pos++;
+    p++;
+  }
+  if (*p)
+    error("scanned text did not start with %s", prefix);
 }
 
 int space(char c) { return c == ' ' || c == '\t'; }
@@ -79,9 +106,16 @@ void skipuntilspace(char **text) {
     (*text)++;
 }
 
+int num(char c) { return c >= '0' && c <= '9'; }
+
 void expectnum(char *text) {
-  if (*text < '0' || *text > '9')
+  if (!num(*text))
     error("expected number, got %s", text);
+}
+
+void expectchar(char *text, char c) {
+  if (*text != c)
+    error("expected %c, got %s", c, text);
 }
 
 char *Strdup(char *text) {
@@ -112,6 +146,7 @@ void parsemem(char *p, char *pend) {
 
   nmem++;
 }
+
 void printmem(struct instruction in) {}
 
 void parseequ(char *p, char *pend) {
@@ -172,7 +207,7 @@ void parseskp(char *p, char *pend) {
     error("too many instructions");
   instr[ninstr].op = "skp";
   instr[ninstr].args.skp.flags = flags;
-  if (*q >= '0' && *q <= '9')
+  if (num(*q))
     instr[ninstr].args.skp.steps = atoi(p);
   else
     instr[ninstr].args.skp.label = Strdup(p);
@@ -181,14 +216,14 @@ void parseskp(char *p, char *pend) {
 }
 
 void printskp(struct instruction in) {
-  int j;
+  int i;
 
   printf("skp ");
-  for (j = 0; j < nelem(skpflags); j++) {
-    if (in.args.skp.flags & 1 << j) {
-      if (j)
+  for (i = 0; i < nelem(skpflags); i++) {
+    if (in.args.skp.flags & 1 << i) {
+      if (i)
         putchar('|');
-      printf("%s", skpflags[j]);
+      printf("%s", skpflags[i]);
     }
   }
   printf(", ");
@@ -199,11 +234,47 @@ void printskp(struct instruction in) {
 }
 
 void parsewlds(char *p, char *pend) {
-  skipspace(&p);
+  int x;
+  struct scanner s;
+  s.start = s.pos = p;
+  s.end = pend;
 
-  puts(p);
+  scanner_advance(&s, space(*s.pos));
+
+  scanner_eatstr(&s, "sin");
+  if (*s.pos != '0' && *s.pos != '1')
+    error("expected sin0 or sin1, got %s", s.pos[-3]);
+
+  instr[ninstr].op = "wlds";
+  instr[ninstr].args.wlds.sin = *s.pos++ - '0';
+
+  scanner_advance(&s, space(*s.pos));
+  scanner_eatstr(&s, ",");
+  scanner_advance(&s, space(*s.pos));
+
+  expectnum(s.pos);
+  x = atoi(s.pos);
+  if (x >= (1 << 9) || x < 0)
+    error("expected uint9, got %s", s.pos);
+  instr[ninstr].args.wlds.freq = x;
+  scanner_advance(&s, num(*s.pos));
+
+  scanner_advance(&s, space(*s.pos));
+  scanner_eatstr(&s, ",");
+  scanner_advance(&s, space(*s.pos));
+
+  x = atoi(s.pos);
+  if (x >= (1 << 15) || x < 0)
+    error("expected uint15, got %s", s.pos);
+  instr[ninstr].args.wlds.amp = x;
+
+  ninstr++;
 }
-void printwlds(struct instruction in) {}
+
+void printwlds(struct instruction in) {
+  printf("wlds sin%d, %d, %d", in.args.wlds.sin, in.args.wlds.freq,
+         in.args.wlds.amp);
+}
 
 struct {
   char *op;
