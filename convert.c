@@ -25,6 +25,20 @@ int nequ = 0;
 
 char *skpflags[] = {"run", "zrc", "zro", "gez", "neg"};
 
+struct skipargs {
+  int flags;
+  char *label;
+  int steps;
+};
+
+struct {
+  char *op;
+  union {
+    struct skipargs skp;
+  } args;
+} instr[MAX_INSTRUCTIONS];
+int ninstr;
+
 char line[1024];
 
 void error(char *fmt, ...) {
@@ -125,6 +139,8 @@ void handleequ(char *p, char *pend) {
 
 void handleskp(char *p, char *pend) {
   int flags = 0;
+  char *q;
+
   skipspace(&p);
   while (*p != ',') {
     int i;
@@ -142,6 +158,23 @@ void handleskp(char *p, char *pend) {
   }
   if (!flags)
     error("expected nonzero flags bitmap at %s", p);
+
+  p++;
+  skipspace(&p);
+  q = p;
+  skipuntilspace(&q);
+  *q = 0;
+
+  if (ninstr >= nelem(instr))
+    error("too many instructions");
+  instr[ninstr].op = "skp";
+  instr[ninstr].args.skp.flags = flags;
+  if (*q >= '0' && *q <= '9')
+    instr[ninstr].args.skp.steps = atoi(p);
+  else
+    instr[ninstr].args.skp.label = Strdup(p);
+
+  ninstr++;
 }
 
 struct {
@@ -151,7 +184,7 @@ struct {
 
 int main(void) {
   char *p;
-  int i;
+  int i, j;
 
   while ((p = fgets(line, sizeof(line) - 1, stdin))) {
     char *q, *pend = strchr(p, '\n');
@@ -186,4 +219,24 @@ int main(void) {
   for (i = 0; i < nequ; i++)
     if (equ[i].isreg)
       printf("equ[%d]={\"%s\",reg%d}\n", i, equ[i].label, equ[i].value.r);
+
+  for (i = 0; i < ninstr; i++) {
+    printf("instr[%d]=", i);
+    if (!strcmp("skp", instr[i].op)) {
+      printf("skp ");
+      for (j = 0; j < nelem(skpflags); j++) {
+        if (instr[i].args.skp.flags & 1 << j) {
+          if (j)
+            putchar('|');
+          printf("%s", skpflags[i]);
+        }
+      }
+      printf(", ");
+      if (instr[i].args.skp.label)
+        printf("%s", instr[i].args.skp.label);
+      else
+        printf("%d", instr[i].args.skp.steps);
+    }
+    putchar('\n');
+  }
 }
