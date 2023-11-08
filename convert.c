@@ -35,11 +35,16 @@ struct wldsargs {
   int sin, freq, amp;
 };
 
+struct labelargs {
+  char *name;
+};
+
 struct instruction {
   char *op;
   union {
     struct skipargs skp;
     struct wldsargs wlds;
+    struct labelargs label;
   } args;
 } instr[2 * MAX_INSTRUCTIONS];
 int ninstr;
@@ -138,8 +143,6 @@ void parsemem(char *p, char *pend) {
   nmem++;
 }
 
-void printmem(struct instruction in) {}
-
 void parseequ(char *p, char *pend) {
   char *q;
 
@@ -164,7 +167,7 @@ void parseequ(char *p, char *pend) {
   nequ++;
 }
 
-void printequ(struct instruction in) {}
+void printnone(struct instruction in) {}
 
 void parseskp(char *p, char *pend) {
   int flags = 0;
@@ -264,14 +267,19 @@ void printwlds(struct instruction in) {
          in.args.wlds.amp);
 }
 
+void parsenone(char *p, char *pend) {}
+
+void printlabel(struct instruction in) { printf("%s:", in.args.label.name); }
+
 struct {
   char *op;
   void (*parse)(char *p, char *pend);
   void (*print)(struct instruction in);
-} optab[] = {{"mem", parsemem, printmem},
-             {"equ", parseequ, printequ},
+} optab[] = {{"mem", parsemem, printnone},
+             {"equ", parseequ, printnone},
              {"skp", parseskp, printskp},
-             {"wlds", parsewlds, printwlds}};
+             {"wlds", parsewlds, printwlds},
+             {"label", parsenone, printlabel}};
 
 int main(void) {
   char *p;
@@ -290,6 +298,14 @@ int main(void) {
     *pend = 0;
 
     skipspace(&p);
+
+    if ((q = strchr(p, ':'))) {
+      *q = 0; /* TODO validate label */
+      instr[ninstr].op = "label";
+      instr[ninstr].args.label.name = Strdup(p);
+      ninstr++;
+      continue;
+    }
 
     for (i = 0; i < nelem(optab); i++) {
       if (match(optab[i].op, &p)) {
