@@ -144,6 +144,11 @@ void handleskp(char *p, char *pend) {
     error("expected nonzero flags bitmap at %s", p);
 }
 
+struct {
+  char *op;
+  void (*handle)(char *p, char *pend);
+} handlers[] = {{"mem", handlemem}, {"equ", handleequ}, {"skp", handleskp}};
+
 int main(void) {
   char *p;
   int i;
@@ -162,12 +167,12 @@ int main(void) {
 
     skipspace(&p);
 
-    if (match("mem", &p)) /* TODO: handle "name mem value" syntax */
-      handlemem(p, pend);
-    else if (match("equ", &p)) /* TODO: handle "name equ value" syntax */
-      handleequ(p, pend);
-    else if (match("skp", &p))
-      handleskp(p, pend);
+    for (i = 0; i < nelem(handlers); i++) {
+      if (match(handlers[i].op, &p)) {
+        handlers[i].handle(p, pend);
+        break;
+      }
+    }
   }
 
   /* Add a sentinel element at the end so that for all i<nmem, size(i) ==
