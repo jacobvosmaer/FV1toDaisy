@@ -112,11 +112,13 @@ void handleequ(char *p, char *pend) {
   equ[nequ].label = Strdup(p);
   p = q + 1;
   skipspace(&p);
-  if (pend - p > 3 && !memcmp(p, "reg", 3)) { /* TODO handle equ constant */
+  if (pend - p > 3 && !memcmp(p, "reg", 3)) {
     equ[nequ].isreg = 1;
     p += 3;
     expectnum(p);
     equ[nequ].value.r = atoi(p);
+  } else {
+    /* TODO handle equ constant */
   }
   nequ++;
 }
