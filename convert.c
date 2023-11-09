@@ -136,13 +136,12 @@ void parsemem(char *p, char *pend) {
   if (nmem >= nelem(mem) - 1)
     error("too many mem declarations");
 
-  skipspace(&p);
+  eatstr(&p, " ");
   q = p;
   skipuntilspace(&q);
   *q = 0;
   mem[nmem].label = Strdup(p);
   p = q + 1;
-  skipspace(&p);
   expectnum(p);
   mem[nmem].offset = memtop;
   memtop += atoi(p);
@@ -158,14 +157,13 @@ void parseequ(char *p, char *pend) {
   if (nequ >= nelem(equ))
     error("too many equ declarations");
 
-  skipspace(&p);
+  eatstr(&p, " ");
   q = p;
   skipuntilspace(&q);
   *q = 0;
   equ[nequ].label = Strdup(p);
   p = q + 1;
-  skipspace(&p);
-  if (pend - p > 3 && !memcmp(p, "reg", 3)) {
+  if (startwith(p, "reg")) {
     equ[nequ].isreg = 1;
     p += 3;
     expectnum(p);
@@ -181,7 +179,6 @@ void printnone(struct instruction in) {}
 int parseflags(char **p, char *pend, char *flags[], int nflags) {
   int ret = 0;
 
-  skipspace(p);
   if (**p == ',') {
     (*p)++;
     return 0;
@@ -195,7 +192,6 @@ int parseflags(char **p, char *pend, char *flags[], int nflags) {
     if (ret >= 1 << nflags)
       error("invalid bits in flag: 0x%x", ret);
     *p = q;
-    skipspace(p);
   } else {
     while (**p != ',') {
       int i;
@@ -220,17 +216,16 @@ void parseskp(char *p, char *pend) {
   int flags = 0;
   char *q;
 
-  skipspace(&p);
+  eatstr(&p, " ");
   flags = parseflags(&p, pend, skpflags, nelem(skpflags));
 
-  skipspace(&p);
   q = p;
   skipuntilspace(&q);
   *q = 0;
 
   instr[ninstr].op = "skp";
   instr[ninstr].args.skp.flags = flags;
-  if (num(*q))
+  if (num(*p))
     instr[ninstr].args.skp.steps = atoi(p);
   else
     instr[ninstr].args.skp.label = Strdup(p);
@@ -263,18 +258,15 @@ void printskp(struct instruction in) {
 void parsewlds(char *p, char *pend) {
   int x;
 
-  skipspace(&p);
-  eatstr(&p, "sin");
+  eatstr(&p, " sin");
   if (*p != '0' && *p != '1')
     error("expected sin0 or sin1, got %s", p[-3]);
 
   instr[ninstr].op = "wlds";
   instr[ninstr].args.wlds.sin = *p++ - '0';
 
-  skipspace(&p);
   eatstr(&p, ",");
 
-  skipspace(&p);
   expectnum(p);
   x = atoi(p);
   if (x >= (1 << 9) || x < 0)
@@ -283,9 +275,7 @@ void parsewlds(char *p, char *pend) {
   while (*p && num(*p))
     p++;
 
-  skipspace(&p);
   eatstr(&p, ",");
-  skipspace(&p);
 
   x = atoi(p);
   if (x >= (1 << 15) || x < 0)
@@ -310,12 +300,11 @@ void parsecho(char *p, char *pend) {
   struct choargs *args = &instr[ninstr].args.cho;
   instr[ninstr].op = "cho";
 
-  skipspace(&p);
+  eatstr(&p, " ");
   if (startwith(p, "rdal")) {       /* cho rdal */
   } else if (startwith(p, "rda")) { /* cho rda */
     eatstr(&p, "rda,");
     args->sub = "rda";
-    skipspace(&p);
     if (pend - p < 4)
       error("input too short: %s", p);
     if (p[3] != '0' && p[3] != '1')
@@ -328,11 +317,8 @@ void parsecho(char *p, char *pend) {
       error("expected sin or rmp, got %s", p);
     p += 4;
 
-    skipspace(&p);
     eatstr(&p, ",");
-    skipspace(&p);
     args->c = parseflags(&p, pend, chordaflags, nelem(chordaflags));
-    skipspace(&p);
 
     puts(p);
   } else if (startwith(p, "sof")) { /* cho sof */
@@ -374,6 +360,24 @@ int main(void) {
       pend = q;
     while (p < pend && space(pend[-1]))
       pend--;
+    *pend = 0;
+
+    /* Normalize text, hope it is case insensitive */
+    for (q = p; *q; q++)
+      if (*q >= 'A' && *q <= 'Z')
+        *q += 'a' - 'A';
+      else if (*q == '\t')
+        *q = ' ';
+    for (q = p; q < pend;) {
+      if ((q > p &&
+           ((q[0] == ' ' && q[-1] == ' ') || (q[0] == ' ' && q[-1] == ','))) ||
+          (q < pend - 1 && q[0] == ' ' && q[1] == ',')) {
+        memmove(q, q + 1, pend - (q + 1));
+        pend--;
+      } else {
+        q++;
+      }
+    }
     *pend = 0;
 
     skipspace(&p);
