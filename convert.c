@@ -257,6 +257,7 @@ void printskp(struct instruction in) {
 
 void parsewlds(char *p, char *pend) {
   int x;
+  char *q;
 
   eatstr(&p, " sin");
   if (*p != '0' && *p != '1')
@@ -268,12 +269,11 @@ void parsewlds(char *p, char *pend) {
   eatstr(&p, ",");
 
   expectnum(p);
-  x = atoi(p);
+  x = strtol(p, &q, 0);
   if (x >= (1 << 9) || x < 0)
     error("expected uint9, got %s", p);
   instr[ninstr].args.wlds.freq = x;
-  while (*p && num(*p))
-    p++;
+  p = q;
 
   eatstr(&p, ",");
 
@@ -368,9 +368,10 @@ int main(void) {
         *q += 'a' - 'A';
       else if (*q == '\t')
         *q = ' ';
-    for (q = p; q < pend;) {
-      if ((q > p &&
-           ((q[0] == ' ' && q[-1] == ' ') || (q[0] == ' ' && q[-1] == ','))) ||
+    q = p;
+    while (q < pend) {
+      if ((q > p && q[-1] == ' ' && q[0] == ' ') ||
+          (q > p && q[-1] == ',' && q[0] == ' ') ||
           (q < pend - 1 && q[0] == ' ' && q[1] == ',')) {
         memmove(q, q + 1, pend - (q + 1));
         pend--;
